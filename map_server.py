@@ -12,7 +12,9 @@ import subprocess
 import threading
 import time
 
-SERVER = os.environ.get("MC_SERVER", "ai-companions-server")  # the Bedrock server container
+_local = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json")
+SERVER = os.environ.get("MC_SERVER") or (json.load(open(_local)).get("server") if os.path.exists(_local) else None) \
+    or "ai-companions-server"  # the Bedrock server container (see local.json in brain.py)
 PORT = 8765
 STATE = {"snap": None, "terrain": None}
 HERE = os.path.dirname(os.path.abspath(__file__))

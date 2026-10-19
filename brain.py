@@ -20,9 +20,11 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# your own setup, kept out of git: local.json, e.g. {"companions": "my_family.json", "server": "my-bedrock"}
+LOCAL = json.load(open(os.path.join(HERE, "local.json"))) if os.path.exists(os.path.join(HERE, "local.json")) else {}
 # which companions play: companions.json, or another file (e.g. COMPANIONS=examples/family.json python3 brain.py start)
-CONFIG = os.path.join(HERE, os.environ.get("COMPANIONS", "companions.json"))
-SERVER = os.environ.get("MC_SERVER", "ai-companions-server")  # the Bedrock server container
+CONFIG = os.path.join(HERE, os.environ.get("COMPANIONS") or LOCAL.get("companions") or "companions.json")
+SERVER = os.environ.get("MC_SERVER") or LOCAL.get("server") or "ai-companions-server"  # the Bedrock server container
 NODE_MODULES = os.path.join(HERE, "bot", "node_modules")  # `npm install` in bot/
 THINK_EVERY = 10  # seconds between decisions when nothing happens
 SPEAK_GAP = 45  # seconds between unprompted chat lines

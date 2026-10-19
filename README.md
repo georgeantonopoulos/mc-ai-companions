@@ -85,6 +85,10 @@ Script changes load without kicking anyone: copy `Claude_BP` into `server/data/b
 | `deal` | A deal file (see `examples/deals/`). The companion won't help until its kid makes a promise in chat. |
 | `listens_to`, `manages`, `crew`, `members`, `pester`, `band` | Teams: a builder crew that listens to an architect, a crew grown into N players, a baby's targets, a pop band. See `examples/family.json`. |
 
+To keep your own setup out of git (real gamertags, your server), put it in `local.json`, which is git-ignored:
+`{"companions": "my_family.json", "server": "my-bedrock-container"}`. The `COMPANIONS` and `MC_SERVER` environment
+variables win over it.
+
 ### 2. A role: `roles/<name>.md`
 
 A JSON header of traits, then the instructions that role adds:

@@ -8,3 +8,4 @@ songs/tmp/
 data/*
 !data/.gitkeep
 *.tmp
+local.json

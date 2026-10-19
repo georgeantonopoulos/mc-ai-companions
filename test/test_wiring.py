@@ -26,6 +26,10 @@ MAIN = open(os.path.join(HERE, "Claude_BP", "scripts", "main.js")).read()
 BRAIN = open(os.path.join(HERE, "brain.py")).read()
 ACTIONS = {k: v for k, v in json.load(open(os.path.join(HERE, "actions.json"))).items() if not k.startswith("_")}
 CONFIGS = [os.path.join(HERE, "companions.json")] + sorted(glob.glob(os.path.join(HERE, "examples", "*.json")))
+if os.path.exists(os.path.join(HERE, "local.json")):  # your own companions too
+    _mine = json.load(open(os.path.join(HERE, "local.json"))).get("companions")
+    if _mine:
+        CONFIGS.append(os.path.join(HERE, _mine))
 
 
 def runners():
@@ -36,7 +40,7 @@ def runners():
 
 def brain(config):
     """A fresh brain module reading the given companions file."""
-    os.environ["COMPANIONS"] = os.path.relpath(config, HERE)
+    os.environ["COMPANIONS"] = os.path.relpath(config, HERE)  # wins over local.json
     sys.argv = ["brain.py"]
     import brain as b
     return importlib.reload(b)
