@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Map</title>
+<style>
+  :root { --bg: #14161b; --panel: #1d2028; --ink: #e8e8ec; --muted: #9aa0ad; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, system-ui, sans-serif; }
+  header { display: flex; gap: 16px; align-items: baseline; padding: 10px 16px; background: var(--panel); flex-wrap: wrap; }
+  header b { font-size: 16px; }
+  #clock, #status { color: var(--muted); }
+  main { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+  canvas { background: #0b0c10; border-radius: 8px; max-width: 100%; height: auto; touch-action: none; }
+  #side { flex: 1 1 220px; min-width: 200px; }
+  .who { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .bar { flex: 1; height: 6px; background: #2b2f3a; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: #4cc26a; }
+  .legend { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .legend span { display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 10px; vertical-align: -1px; border-radius: 2px; }
+  button { background: #2b2f3a; color: var(--ink); border: 0; border-radius: 6px; padding: 4px 10px; }
+</style>
+</head>
+<body>
+<header><b>Survival with Claude</b><span id="clock"></span><span id="status">connecting…</span>
+  <span><button id="zin">＋</button> <button id="zout">－</button></span></header>
+<main>
+  <canvas id="map" width="720" height="720"></canvas>
+  <div id="side"><div id="people"></div>
+    <div class="legend">
+      <span style="background:#5fae45"></span>grass<span style="background:#2f6fd0"></span>water<span style="background:#ff7a1a"></span>lava
+      <span style="background:#2d6b2d"></span>trees<span style="background:#d9c47c"></span>sand<span style="background:#8a8f99"></span>stone
+      <span style="background:#c9a36b"></span>builds<span style="background:#e04848"></span>monsters
+    </div>
+  </div>
+</main>
+<script>
+const cv = document.getElementById("map"), g = cv.getContext("2d");
+const LAND = { w: "#2f6fd0", l: "#ff7a1a", f: "#2d6b2d", t: "#6b4a2b", s: "#d9c47c", i: "#e8f1f7", g: "#5fae45",
+               d: "#7a5a3a", b: "#c9a36b", r: "#8a8f99", o: "#55605a", ".": "#0b0c10" };
+const KID = ["#ffd23f", "#ff6bd6"], COMP = "#5ad1ff";
+let zoom = 6, data = null;
+document.getElementById("zin").onclick = () => { zoom = Math.min(14, zoom + 1); draw(); };
+document.getElementById("zout").onclick = () => { zoom = Math.max(2, zoom - 1); draw(); };
+
+function colourFor(p, i) { return p.c ? COMP : KID[i % KID.length]; }
+
+function draw() {
+  if (!data || !data.ps) return;
+  const W = cv.width, H = cv.height;
+  const kids = data.ps.filter((p) => !p.c);
+  const cx = kids.length ? kids.reduce((a, p) => a + p.x, 0) / kids.length : data.cx;
+  const cz = kids.length ? kids.reduce((a, p) => a + p.z, 0) / kids.length : data.cz;
+  const sx = (x) => W / 2 + (x - cx) * zoom, sz = (z) => H / 2 + (z - cz) * zoom;
+  g.fillStyle = "#0b0c10"; g.fillRect(0, 0, W, H);
+  const land = data.land;
+  if (land) {
+    const rows = land.rows.split("|");
+    rows.forEach((row, zi) => [...row].forEach((ch, xi) => {
+      g.fillStyle = LAND[ch] || LAND.o;
+      const x = land.cx - land.r + xi * land.s, z = land.cz - land.r + zi * land.s;
+      g.fillRect(sx(x), sz(z), land.s * zoom + 0.5, land.s * zoom + 0.5);
+    }));
+  }
+  // north arrow and scale
+  g.fillStyle = "#e8e8ec"; g.font = "bold 13px system-ui"; g.fillText("N ↑", 10, 20);
+  g.fillRect(10, H - 14, 10 * zoom, 3); g.font = "11px system-ui"; g.fillText("10 blocks", 14 + 10 * zoom, H - 9);
+  for (const [t, x, z] of data.mobs || []) {
+    g.fillStyle = t === "creeper" ? "#3fe05a" : "#e04848";
+    g.beginPath(); g.arc(sx(x), sz(z), Math.max(3, zoom * 0.45), 0, 7); g.fill();
+  }
+  let ki = 0;
+  for (const p of data.ps) {
+    const col = colourFor(p, p.c ? 0 : ki++);
+    const x = sx(p.x), y = sz(p.z), r = p.c ? 5 : 7;
+    g.fillStyle = col; g.strokeStyle = "#000"; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = "#fff"; g.font = (p.c ? "" : "bold ") + "12px system-ui";
+    g.fillText(p.n.replace("12an", ""), x + r + 3, y - 3);
+    g.fillStyle = "#9aa0ad"; g.font = "10px system-ui"; g.fillText("y " + p.y, x + r + 3, y + 9);
+  }
+}
+
+function side() {
+  const t = data.t, night = t > 13000 && t < 23000;
+  document.getElementById("clock").textContent = night ? "🌙 night" : t > 12000 && t <= 13000 ? "🌇 sunset" : "☀️ day";
+  let ki = 0;
+  document.getElementById("people").innerHTML = data.ps.map((p) =>
+    `<div class="who"><span class="dot" style="background:${colourFor(p, p.c ? 0 : ki++)}"></span>${p.n}` +
+    `<span class="bar"><i style="width:${Math.max(0, Math.min(100, p.hp * 5))}%;background:${p.hp < 7 ? "#e04848" : p.hp < 13 ? "#e0b648" : "#4cc26a"}"></i></span>${p.hp}</div>`).join("") +
+    `<div class="legend">${(data.mobs || []).length} monsters nearby</div>`;
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/state", { cache: "no-store" });
+    data = await r.json();
+    document.getElementById("status").textContent = data.ps ? "live" : "waiting for the game…";
+    if (data.ps) { draw(); side(); }
+  } catch { document.getElementById("status").textContent = "map server not running"; }
+}
+tick(); setInterval(tick, 2000);
+</script>
+</body>
+</html>

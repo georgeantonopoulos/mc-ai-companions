@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+bot/node_modules/
+server/data/
+test/data/
+songs/tmp/
+data/*
+!data/.gitkeep

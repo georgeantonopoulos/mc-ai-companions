@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Claude Companion Sounds v1.1.0",
+    "description": "The Pixel Pops' songs.",
+    "uuid": "c9d6d4a2-3847-4955-b756-0f0c1596d7d1",
+    "version": [
+      1,
+      1,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      26,
+      20
+    ]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "5c4228d2-8068-4010-87d5-9e2b9e6c8df8",
+      "version": [
+        1,
+        1,
+        0
+      ]
+    }
+  ]
+}

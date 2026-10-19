@@ -1,0 +1,74 @@
+{
+ "format_version": "1.21.0",
+ "minecraft:entity": {
+  "description": {
+   "identifier": "companion:taxi",
+   "is_spawnable": true,
+   "is_summonable": true
+  },
+  "components": {
+   "minecraft:type_family": {
+    "family": [
+     "taxi",
+     "inanimate"
+    ]
+   },
+   "minecraft:collision_box": {
+    "width": 1.8,
+    "height": 1.6
+   },
+   "minecraft:health": {
+    "value": 1000,
+    "max": 1000
+   },
+   "minecraft:damage_sensor": {
+    "triggers": {
+     "cause": "all",
+     "deals_damage": "no"
+    }
+   },
+   "minecraft:knockback_resistance": {
+    "value": 1.0
+   },
+   "minecraft:pushable": {
+    "is_pushable": false,
+    "is_pushable_by_piston": false
+   },
+   "minecraft:physics": {},
+   "minecraft:movement": {
+    "value": 0.0
+   },
+   "minecraft:persistent": {},
+   "minecraft:nameable": {
+    "always_show": true
+   },
+   "minecraft:rideable": {
+    "seat_count": 2,
+    "family_types": [
+     "player"
+    ],
+    "interact_text": "Get in the taxi",
+    "seats": [
+     {
+      "position": [
+       0.35,
+       0.55,
+       0.1
+      ],
+      "min_rider_count": 0,
+      "max_rider_count": 2
+     },
+     {
+      "position": [
+       -0.35,
+       0.55,
+       0.1
+      ],
+      "min_rider_count": 1,
+      "max_rider_count": 2
+     }
+    ]
+   }
+  }
+ }
+}

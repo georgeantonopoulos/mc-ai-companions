@@ -1,0 +1,41 @@
+{
+ "format_version": "1.20.20",
+ "sound_definitions": {
+  "pixelpops.block_by_block": {
+   "category": "record",
+   "min_distance": 4.0,
+   "max_distance": 48.0,
+   "sounds": [
+    {
+     "name": "sounds/pixelpops/block_by_block",
+     "stream": true,
+     "volume": 1.0
+    }
+   ]
+  },
+  "pixelpops.dragon_dash": {
+   "category": "record",
+   "min_distance": 4.0,
+   "max_distance": 48.0,
+   "sounds": [
+    {
+     "name": "sounds/pixelpops/dragon_dash",
+     "stream": true,
+     "volume": 1.0
+    }
+   ]
+  },
+  "pixelpops.baby_boo": {
+   "category": "record",
+   "min_distance": 4.0,
+   "max_distance": 48.0,
+   "sounds": [
+    {
+     "name": "sounds/pixelpops/baby_boo",
+     "stream": true,
+     "volume": 1.0
+    }
+   ]
+  }
+ }
+}
