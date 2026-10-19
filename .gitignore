@@ -7,3 +7,4 @@ test/data/
 songs/tmp/
 data/*
 !data/.gitkeep
+*.tmp

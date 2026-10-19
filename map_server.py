@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 
-SERVER = "ai-companions-server"
+SERVER = os.environ.get("MC_SERVER", "ai-companions-server")  # the Bedrock server container
 PORT = 8765
 STATE = {"snap": None, "terrain": None}
 HERE = os.path.dirname(os.path.abspath(__file__))

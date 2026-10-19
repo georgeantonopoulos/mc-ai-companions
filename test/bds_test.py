@@ -54,3 +54,15 @@ def start():
             return
         time.sleep(2)
     raise SystemExit("server did not start:\n" + logs()[-3000:])
+
+
+def install_packs():
+    """Put the companion packs (Claude_BP, Claude_RP) into the test world."""
+    import json
+    w = os.path.join(DATA, "worlds", WORLD)
+    for kind, src in (("behavior_packs", "Claude_BP"), ("resource_packs", "Claude_RP")):
+        dst = os.path.join(DATA, kind, src)
+        shutil.rmtree(dst, ignore_errors=True)
+        shutil.copytree(os.path.join(HERE, src), dst)
+        h = json.load(open(os.path.join(dst, "manifest.json")))["header"]
+        json.dump([{"pack_id": h["uuid"], "version": h["version"]}], open(os.path.join(w, "world_%s.json" % kind), "w"))

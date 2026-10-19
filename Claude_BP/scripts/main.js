@@ -9,6 +9,7 @@
 //   /scriptevent claude:look <Name> <id>      -> prints  [claude] {"who":<Name>,"look":<id>, ...what they see...}
 //   /scriptevent claude:do <Name> {"act":..}  -> starts a task (replaces the current one)
 import { system, world, ItemStack, EntityDamageCause, BlockPermutation, EnchantmentType } from "@minecraft/server";
+import { ACTIONS } from "./actions.js"; // the shared action list (actions.json)
 
 let BOT = ""; // the companion being run right now
 const WALK = 0.22; // blocks per tick (a player walks 4.3 b/s)
@@ -81,14 +82,12 @@ function groundY(dim, x, z, fromY, maxUp = 1) {
 }
 
 // --- moving like a player -----------------------------------------------------------------------------------
-// A companion tagged "drive" moves itself: the script works out where to step and passes it to the companion's own
-// connection (body.js, through its action bar), which walks there like any player's game does. Other players then
-// see real walking (legs, head) and real arm swings. Without the tag the script teleports it (the old way).
-const INTENT = new Map(); // where each driven companion is heading this tick (the server catches up a tick later)
+// A companion moves itself: the script works out where to step and passes real controls to the companion's own
+// connection (body.js, through its action bar), which walks there like any player's game does. Other players see
+// real walking (legs, head turning) and real arm swings, and the server does the physics (gravity, water, slopes).
+const INTENT = new Map(); // where a companion was last sent with moveTo (for the debug view)
 function here(p) {
-  if (p.hasTag("drive")) return p.location; // the server moves driven companions itself
-  const i = INTENT.get(p.name);
-  return i && dist(i, p.location) < 1.5 ? i : p.location;
+  return p.location;
 }
 
 /** Real controls for a driven companion: which way to face, walk forward or not, sprint, jump, sneak. The server
@@ -99,7 +98,6 @@ function controls(p, o) {
 const yawTo = (from, to) => (Math.atan2(-(to.x - from.x), to.z - from.z) * 180) / Math.PI;
 const pitchTo = (from, to) => (-Math.atan2(to.y - (from.y + 1.62), Math.hypot(to.x - from.x, to.z - from.z)) * 180) / Math.PI;
 function moveTo(p, pos, look, jumping = false) {
-  if (!p.hasTag("drive")) return void p.teleport(pos, look ? { facingLocation: look } : undefined);
   INTENT.set(p.name, { ...pos });
   let r = [0, 0];
   if (look) {
@@ -119,39 +117,9 @@ function swing(p) {
 function step(p, tx, tz, look, speed = WALK) {
   const at = here(p);
   const d = Math.hypot(tx - at.x, tz - at.z);
-  if (p.hasTag("drive")) {
-    // remember where we're trying to get to, so being stuck (no route at all) gets noticed and we dig our way out
-    goal = { x: tx, z: tz, y: look?.y ?? navTargetY(p.dimension, tx, tz, look, at.y), tick };
-    return drive(p, at, tx, tz, d, look, speed);
-  }
-  if (d < 0.1) return true;
-  const sp = Math.min(speed, d);
-  const base = Math.atan2(tz - at.z, tx - at.x);
-  goal = { x: tx, z: tz, y: look?.y ?? at.y, tick };
-  const climb = 1;
-  const side = task?.side ?? 1;
-  for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.2, -2.2]) {
-    const a = base + off * side;
-    const nx = at.x + Math.cos(a) * sp;
-    const nz = at.z + Math.sin(a) * sp;
-    const gy = groundY(p.dimension, nx, nz, at.y, climb);
-    if (gy === undefined) continue;
-    // like a player: a step up is a little jump (rise over a few ticks), a step down is a fall (gravity does it)
-    let y = gy;
-    let [mx, mz] = [nx, nz];
-    if (gy > at.y + 0.01) {
-      y = Math.min(gy, at.y + 0.42);
-      if (y < gy - 0.05) [mx, mz] = [at.x, at.z]; // still rising: up first, then across onto the block
-    } else if (gy < at.y - 0.01) y = at.y;
-    moveTo(p, { x: mx, y, z: mz }, look ?? { x: tx, y: gy + 1.6, z: tz }, y > at.y + 0.01);
-    if (task) {
-      task.stuck = off === 0 ? 0 : (task.stuck ?? 0) + (Math.abs(off) > 1.5 ? 1 : 0);
-      if (task.stuck > 60) task.side = -side; // wall-follow the other way
-    }
-    return true;
-  }
-  if (task) task.stuck = (task.stuck ?? 0) + 1;
-  return false;
+  // remember where we're trying to get to, so being stuck (no route at all) gets noticed and we dig our way out
+  goal = { x: tx, z: tz, y: look?.y ?? navTargetY(p.dimension, tx, tz, look, at.y), tick };
+  return drive(p, at, tx, tz, d, look, speed);
 }
 
 // --- route-finding (for driven companions) ---------------------------------------------------------------------
@@ -389,8 +357,8 @@ function hold(p, kind) {
 
 function weaponDamage(p) {
   const it = inv(p).getItem(p.selectedSlotIndex)?.typeId ?? "";
-  if (p.hasTag("guard") && it === "minecraft:netherite_sword") return 10000; // "infinite sharpness": one hit, any monster
-  const mult = p.hasTag("champion") ? 4 : 1; // a champion hits like four players (skill, not items)
+  if (p.hasTag("armoured") && it === "minecraft:netherite_sword") return 10000; // "infinite sharpness": one hit, any monster
+  const mult = p.hasTag("strong") ? 4 : 1; // a "strong" companion hits like four players (skill, not items)
   const tier = { wooden: 0, golden: 0, stone: 1, iron: 2, diamond: 3, netherite: 4 }[TIERS.find((t) => it.includes(t + "_"))];
   if (it.endsWith("_sword")) return (4 + (tier ?? 0)) * mult;
   if (it.endsWith("_axe")) return (3 + (tier ?? 0)) * mult;
@@ -1207,10 +1175,10 @@ const RUNNERS = {
     }
     if (p.dimension.id !== t.from) return finish(`went through the portal: now in ${p.dimension.id.replace("minecraft:", "")}`);
     const inside = flat(t.cell, p.location) < 0.5 && Math.abs(p.location.y - t.cell.y) < 1;
-    if (inside) return void (p.hasTag("drive") && controls(p, { f: 0 }));
+    if (inside) return void controls(p, { f: 0 });
     if (!t.lined && flat(t.front, p.location) < 0.6 && Math.abs(p.location.y - t.cell.y) < 1) t.lined = true;
     if (!t.lined) return void step(p, t.front.x, t.front.z, t.front);
-    if (p.hasTag("drive") && t.cell.y > p.location.y + 0.4 && flat(t.cell, p.location) < 1.6) {
+    if (t.cell.y > p.location.y + 0.4 && flat(t.cell, p.location) < 1.6) {
       // the portal sits a step up: hop in, like a player
       return void controls(p, { f: 1, j: 1, y: yawTo(p.location, t.cell), p: 0 });
     }
@@ -1351,7 +1319,7 @@ const RUNNERS = {
       const tier = kind.tool ? hold(p, kind.tool) : undefined;
       if (kind.need >= 0 && (tier === undefined || TIERS.indexOf(tier) > kind.need))
         return finish(`I need a ${kind.need >= 5 ? "" : TIERS[kind.need] + " "}pickaxe to mine ${t.block}`);
-      t.timer = Math.round(kind.hand / (tier ? SPEEDUP[tier] : 1) / (p.hasTag("champion") ? 3 : 1));
+      t.timer = Math.round(kind.hand / (tier ? SPEEDUP[tier] : 1) / (p.hasTag("strong") ? 3 : 1));
     }
     if (tick % 5 === 0) {
       faceTo(p, c);
@@ -1512,7 +1480,7 @@ const RUNNERS = {
       const kind = Object.values(MINE).find((k) => k.m.test(b.typeId)) ?? { tool: /_planks|_door|chest|crafting/.test(b.typeId) ? "axe" : "", hand: /glass|torch/.test(b.typeId) ? 6 : 30, need: -1 };
       const tier = kind.tool ? hold(p, kind.tool) : undefined;
       if (kind.need >= 0 && (tier === undefined || TIERS.indexOf(tier) > kind.need)) return finish(`I need a pickaxe to break ${short(b.typeId)}`);
-      t.timer = Math.round(kind.hand / (tier ? SPEEDUP[tier] : 1) / (p.hasTag("champion") ? 3 : 1));
+      t.timer = Math.round(kind.hand / (tier ? SPEEDUP[tier] : 1) / (p.hasTag("strong") ? 3 : 1));
     }
     if (tick % 5 === 0) {
       faceTo(p, c);
@@ -1570,6 +1538,12 @@ const RUNNERS = {
     if (t.done >= t.n) finish(`cooked ${t.done} ${raw}`);
   },
 };
+// every game action in actions.json has a runner here, and every runner is listed there (test/test_wiring.py checks
+// this too, without a server)
+for (const [name, a] of Object.entries(ACTIONS))
+  if (a.runs_in === "game" && !RUNNERS[name]) console.warn(`[claude] actions.json lists "${name}" but main.js has no runner`);
+for (const name of Object.keys(RUNNERS))
+  if (ACTIONS[name]?.runs_in !== "game") console.warn(`[claude] runner "${name}" isn't in actions.json`);
 
 /** One digging step toward c: a tunnel (two blocks high), or a staircase down when c is below us.
  *  Returns a message when it can't go on. */
@@ -1729,8 +1703,7 @@ function climbStep(p) {
 function faceTo(p, e) {
   const l = e.location ?? e;
   const look = { x: l.x, y: l.y + (e.location ? 1.5 : 0), z: l.z };
-  if (p.hasTag("drive")) return void controls(p, { f: 0, y: yawTo(p.location, look), p: pitchTo(p.location, look) });
-  moveTo(p, here(p), look);
+  controls(p, { f: 0, y: yawTo(p.location, look), p: pitchTo(p.location, look) });
 }
 
 // what a prankster is carrying off, and from whom: dropped at the victim's feet when they catch up
@@ -1815,9 +1788,9 @@ function reflexes(p) {
     return;
   }
   // a monster going for someone close by: deal with it first, then carry on
-  const range = p.hasTag("guard") || p.hasTag("champion") ? 28 : 16;
+  const range = p.hasTag("armoured") || p.hasTag("strong") ? 28 : 16;
   for (const who of [p, ...others().filter((q) => dist(q.location, p.location) < range)]) {
-    const e = hostiles(p, who.location, who === p ? 4 : p.hasTag("guard") ? 10 : 6).find((m) => m.typeId !== "minecraft:creeper" || who === p || p.hasTag("guard"));
+    const e = hostiles(p, who.location, who === p ? 4 : p.hasTag("armoured") ? 10 : 6).find((m) => m.typeId !== "minecraft:creeper" || who === p || p.hasTag("armoured"));
     if (e) {
       const prev = task;
       start({ act: "attack", mob: short(e.typeId), secs: 20, reflex: true });
@@ -1892,32 +1865,11 @@ function unembed(p) {
   return false;
 }
 
-/** Gravity: nothing under our feet, so drop (companions are moved by this script, so they don't fall by themselves). */
-function fall(p) {
-  if (task?.act === "perform" || p.hasTag("drive")) return false; // hopping on stage / the server does real gravity
-  const dim = p.dimension;
-  const l = here(p);
-  const below = blockAt(dim, l.x, l.y - 0.05, l.z);
-  if (!below || !soft(below) || /water/.test(below.typeId)) return false;
-  // land on the first solid block below (or in water)
-  for (let y = Math.floor(l.y - 0.05); y > Math.floor(l.y) - 40; y--) {
-    const b = blockAt(dim, l.x, y - 1, l.z);
-    if (!b) return false;
-    if (floorOk(b)) {
-      const drop = Math.min(l.y - y, 0.6 + (FALLING[p.name] ?? 0) * 0.08); // speeds up, like falling
-      FALLING[p.name] = l.y - drop > y ? (FALLING[p.name] ?? 0) + 1 : 0;
-      moveTo(p, { x: l.x, y: l.y - drop, z: l.z });
-      return true;
-    }
-  }
-  return false;
-}
-const FALLING = {};
 
 /** A champion never gets lost: far from his buddy (40+ blocks) and not getting closer for 15 s, he's at her side. */
 const CATCHUP = new Map();
 function catchUp(p) {
-  if (!p.hasTag("champion") || !buddy) return false;
+  if (!p.hasTag("strong") || !buddy) return false;
   const q = world.getPlayers({ name: buddy })[0];
   if (!q) return false;
   const d = dist(q.location, p.location);
@@ -1941,7 +1893,6 @@ function run(p) {
     if (tick % 20 === 10 && catchUp(p)) return;
     const crouch = !!task && /^(build|dig|mine)$/.test(task.act);
     if (p.isSneaking !== crouch) p.isSneaking = crouch;
-    if (fall(p)) return;
     if (tick % 20 === 0 && unembed(p)) return;
     if (tick % 10 === 0) pickUp(p);
     if (tick % 10 === 5) caught(p);
@@ -1987,7 +1938,7 @@ function handle(id, msg) {
     // a protector's sword: netherite, Sharpness V (the game's highest), Unbreaking III, Mending; kept in hand
     const p = bot();
     if (!p) return;
-    p.addTag("guard");
+    p.addTag("armoured");
     const c = inv(p);
     let has = -1;
     for (let i = 0; i < c.size; i++) if (c.getItem(i)?.typeId === "minecraft:netherite_sword") has = i;
@@ -2114,10 +2065,10 @@ function handle(id, msg) {
       task = null;
       return;
     }
-    if (!RUNNERS[t.act]) return out({ result: "unknown action " + t.act });
+    if (ACTIONS[t.act]?.runs_in !== "game" || !RUNNERS[t.act]) return out({ result: "unknown action " + t.act });
     if ((task?.act === "perform" || task?.act === "sing") && tick < task.until) return; // the show goes on
     if (t.count) t.n = Math.max(1, Math.min(64, Number(t.count)));
-    t.secs = { follow: 600, stay: 120, mine: 90, attack: 30, cook: 120, build: 300, dig: 120, stand: 180, snatch: 40, distract: 40, run_away: 20, chase: 30, sing: 60, taxi: 240, park: 5, store: 10, take: 10, shoot: 40, portal: 60, enter_portal: 30 }[t.act] ?? 60;
+    t.secs = ACTIONS[t.act].secs;
     start(t);
   } catch (e) {
     out({ result: "bad command " + msg });

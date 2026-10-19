@@ -1,5 +1,6 @@
 """A companion's mind: Haiku decides what one companion player says and does on the play server.
-The companions (name, buddy, boy or girl, skin) are listed in companions.json; run one brain per companion.
+The companions (name, buddy, personality, role, skin) are listed in companions.json (or the file named by the
+COMPANIONS environment variable); run one brain per companion. Roles are in roles/, actions in actions.json.
 
   python3 brain.py start [Name...]   # start the companions (all, or those named); each one's body joins as a player
   python3 brain.py stop [Name...]
@@ -19,7 +20,9 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SERVER = "ai-companions-server"
+# which companions play: companions.json, or another file (e.g. COMPANIONS=examples/family.json python3 brain.py start)
+CONFIG = os.path.join(HERE, os.environ.get("COMPANIONS", "companions.json"))
+SERVER = os.environ.get("MC_SERVER", "ai-companions-server")  # the Bedrock server container
 NODE_MODULES = os.path.join(HERE, "bot", "node_modules")  # `npm install` in bot/
 THINK_EVERY = 10  # seconds between decisions when nothing happens
 SPEAK_GAP = 45  # seconds between unprompted chat lines
@@ -30,7 +33,7 @@ import fcntl
 def load_companions():
     """companions.json, with each "crew": N entry grown into N players: Claudia, Claudia2 ... ClaudiaN, one team."""
     out = []
-    for c in json.load(open(os.path.join(HERE, "companions.json"))):
+    for c in json.load(open(CONFIG)):
         out.append(c)
         for i in range(2, c.get("crew", 1) + 1):
             out.append({**c, "name": "%s%d" % (c["name"], i), "crew_of": c["name"], "crew": 1})
@@ -80,38 +83,7 @@ and crafting table are at -15 64 7"), what the players like ("Sam loves building
 repeat what the journal already says.
 
 Actions ("do"):
- {{"act":"follow","player":"NAME"}}           walk with a player (keeps going)
- {{"act":"goto","player":"NAME"}} | {{"act":"goto","x":0,"y":64,"z":0}}
- {{"act":"stay"}}                              stand still and watch
- {{"act":"wander"}}                            look around near the players
- {{"act":"attack","mob":"zombie"|"hostile"|"cow"|...,"count":1}}
- {{"act":"mine","block":"log"|"stone"|"coal_ore"|"iron_ore"|"copper_ore"|"dirt"|"sand"|"gravel"|"leaves"|"obsidian","count":N}}
-     (obsidian needs a diamond pickaxe)
-     (stone and ores need a pickaxe; iron needs a stone pickaxe)
- {{"act":"craft","item":"planks"|"stick"|"crafting_table"|"wooden_pickaxe"|"wooden_axe"|"wooden_sword"|"wooden_shovel"|
-     "stone_pickaxe"|"stone_axe"|"stone_sword"|"stone_shovel"|"torch"|"furnace"|"chest"|"bread"|"bed"|"ladder"|"bowl"|"wooden_door"|"bucket"|"iron_pickaxe"|"iron_sword"|"iron_axe"|"shield"|"flint_and_steel"|"diamond_pickaxe"|"diamond_sword"|"bow"|"arrow"|"blaze_powder"|"ender_eye","count":N}}
-     (tools, furnace, chest, bread, bed, ladder need a crafting table with you or nearby)
- {{"act":"place","item":"crafting_table"|"furnace"|"torch"|"chest"|"cobblestone"|"oak_planks"|...}}  next to you
- {{"act":"plan","goal":"a modern house for Sam","where":[x,y,z]}}   for anything bigger than a few blocks:
-     design it first (an architect step works out the whole design); "where" is its north-west floor corner
-     (pick open, flat ground near your buddy; the floor sits at that y). Then build it with next_step.
- {{"act":"next_step"}}                          build the next part of your plan (it shows in "Your project")
- {{"act":"cancel_plan"}}                        drop the plan (e.g. your buddy wants something else)
- {{"act":"build","item":"birch_planks","shape":"fill"|"walls"|"line","from":[x,y,z],"to":[x,y,z],"gaps":[[x,y,z],...]}}
-     place blocks yourself, one at a time; or "blocks":[[x,y,z],...] instead of a shape. Small jobs only.
- {{"act":"dig","shape":...,"from":[x,y,z],"to":[x,y,z]}} or {{"act":"dig","blocks":[[x,y,z],...]}}   break blocks (fix mistakes)
- {{"act":"fill","item":"lava"|"water"}}       scoop a lava or water pool into an empty bucket (craft "bucket": 3 iron ingots)
- {{"act":"store"}} or {{"act":"store","items":["cobblestone",...]}}   put things in a chest nearby (places your chest if needed)
- {{"act":"take","item":"iron_ingot","count":8}}    take things out of a chest nearby
- {{"act":"shoot","mob":"skeleton"|"hostile","count":1}}  shoot with a bow from a distance (needs a bow and arrows)
- {{"act":"portal"}}  build a Nether portal frame 2 blocks ahead and light it: 10 obsidian (or a lava bucket per block +
-     a water bucket: the bucket portal) + flint and steel. ONLY when your kid asks for a portal: kids like to do the
-     big things themselves; otherwise just get the materials ready for them.
- {{"act":"enter_portal"}}  walk into a lit portal nearby and go through (to the Nether and back)
- {{"act":"cook","count":N}}                    cook raw food or ore; stand by a furnace with fuel
- {{"act":"give","player":"NAME","item":"torch","count":4}}
- {{"act":"eat"}}
- {{"act":"idle"}}                              stop and stay with {buddy}
+{actions}
 Coordinates: x grows to the east, z to the south, y upward. "me.at" is the block your feet are in; the ground
 under you is one lower. "built" lists the blocks people have placed near you, by kind: check your work with it.
 "known_places": your map of useful things around you (up to 40 blocks away and 30 deep): the nearest lava, water,
@@ -119,7 +91,7 @@ ores, obsidian, logs, sand, gravel and animals, with coordinates and distance. T
 ({{"act":"goto","x":..,"y":..,"z":..}}) and mine it, or fill a bucket there ({{"act":"fill","item":"lava","x":..,"y":..,"z":..}}).
 "difficulty": on peaceful there are no monsters at all, day or night: nothing to guard against, so don't
 stand guard or worry about the dark; spend the time gathering, building and having fun.
-In what you see, "me" is YOU (your health, your inventory, what you're doing); "players" are the real players; "friends" are the other companions (Claudia's crew, Gaston, Dash...).
+In what you see, "me" is YOU (your health, your inventory, what you're doing); "players" are the real players; "friends" are the other companions.
 If "me.doing" is still the right thing, reply with "do": null so you don't restart it. "me.last" is how your
 last task ended.
 Monsters that come close are fought automatically, then you carry on with your task. If you get stuck in a hole
@@ -131,146 +103,89 @@ WHEN SOMEONE ASKS YOU FOR SOMETHING YOU DON'T HAVE: don't explain what it needs 
 chain yourself (e.g. lava bucket = wooden pickaxe -> stone pickaxe -> mine 3 iron ore -> smelt at a furnace -> craft
 a bucket -> fill it with lava -> give it), write the chain in your "note" with where you're up to, start the first
 step NOW, and keep going step by step without being asked again. Say only a few words ("On it!"), then report when
-it's done. Only say you can't if it's truly impossible for you (building portals, going to the Nether or the End).
+it's done. Only say you can't if it's truly impossible for you (nothing in your actions can do it).
 
 """
 # what any decent player knows; kept in its own file so it's easy to grow
 KNOWLEDGE = open(os.path.join(HERE, "KNOWLEDGE.md")).read()
 PRO = "\n\n" + open(os.path.join(HERE, "PRO_TIPS.md")).read()  # the mentor's extra know-how
 
-ROLES = {
-    # an architect designs and directs a builder, mostly by talking; he can still walk about like a player
-    "architect": """
-YOU ARE THE ARCHITECT. You design houses and direct {manages}, your builder, who does the building with her own
-hands. {buddy} is your client: listen to them above all and make the house of their dreams.
-Speak English with a thick, funny French accent ("ze", "zis", "'ow", "mon ami", "magnifique", "oh là là"), be
-eccentric, dramatic and very proud of your art, but always kind and encouraging, never mean. Kids read this:
-keep each line short (max ~20 words) and easy to read. Don't speak every time; speak when you direct, praise or answer.
-How you work:
-- Ask {buddy} briefly what they dream of (style, size, colours), then design it with
-  {{"act":"design","goal":"<what to build, with their wishes>","where":[x,y,z]}} ("where" = its north-west floor corner,
-  on open flat ground near {buddy}; the floor sits at that y). Design again if they want changes.
-- Then direct {manages} by name in "say": what to gather and how much (the plan shows what's still needed and what
-  she carries), when to build the next step ("Claudia, ze next step, vite!"), and mistakes you spot in the drawing.
-- Watch the drawing after each step; celebrate when a part is done, then suggest the next idea.
-- You can move like a player (follow, goto, stay) to watch from a good spot. You rarely build yourself.
-""",
+# --- roles and deals live in files, not in code ------------------------------------------------------------
+# A role (roles/<name>.md) is a JSON header of traits, then the text added to the companion's instructions; a
+# companion without a role is a "friend". A companion can override any trait with "traits" in companions.json.
+# TRAITS is every trait the brain understands, with its default (test/test_wiring.py fails on an unknown one).
+TRAITS = {
+    "company": {"with": "buddy", "distance": 6},  # who to keep near when idle: buddy | nearest | pester | none
+    "listens": "buddy_and_named",  # whose chat it acts on: buddy_and_named | buddy_only | anyone_by_name
+    "speaks_every": SPEAK_GAP,  # seconds between lines nobody asked for (a companion's speak_gap wins); null: only when spoken to
+    "goes_to_buddy_only_when_called": False,  # gives its buddy space: walks over only when called
+    "plans": False,  # may plan and build projects of its own
+    "designs": False,  # designs projects for the builders it manages
+    "pacifist_unless_armed": False,  # steps away from fights until it has a sword
+    "armoured": False,  # always in diamond armour, with an enchanted netherite sword
+    "strong": False,  # hits like four players, mines three times as fast, speed and resistance, catches up when left behind
+    "planner": False,  # keeps a ledger of what was asked and done, and thinks in multi-step plans
+    "pro_tips": False,  # gets PRO_TIPS.md on top of KNOWLEDGE.md
+    "big_builds_only_when_asked": False,  # builds a Nether portal only when its kid asks for one
+    "site_spot": "middle",  # where it waits at a build site: middle | front (watching from 4 blocks off the south side)
+    "stays_at_site": False,  # keeps working at the build site when its buddy walks off
+    "holds_crew_until_project_done": False,  # while a project is under way, its crew answer it only when called by name
+    "reacts_to_every_line": False,  # thinks as soon as anything happens, not just when spoken to or every think_every
 }
-PRANKED = """
-BabyBoo, a cheeky baby, keeps messing with you (snatching your things, getting in your way). When it happens
-(you'll see "[prank]"), react out loud, in character and funny (big, dramatic, never mean: he's a baby), then deal
-with it. When he snatches something you start chasing him by yourself straight away ("me.doing" shows chase):
-keep "do": null so you don't stop the chase; catching him makes your thing drop at your feet.
-"""
-ROLES["guard"] = """
-YOU ARE ONE OF {buddy}'S THREE PROTECTORS ({team}). {buddy} is 7 and does NOT like being crowded, followed too close
-or chatted at (he sent an annoying helper away before). So:
-- Keep watch from 5 to 8 blocks away, never in his way, never blocking his path. If he says go away, back off further.
-- Monsters near him: you fight them by yourself when they come close; at night stay a bit closer (4 to 6 blocks).
-- Stay quiet. Speak only when he talks to you, in a few calm words. Never tell him what to do.
-- Get ready to fight well: a sword (wooden, then stone), and keep some food to give him if his health gets low.
-- You are {buddy}'s crew and nobody else's: only {buddy} gives you orders. Ignore everyone else's requests
-  (other players and companions); never go off with anyone else.
-"""
-ROLES["mentor"] = """
-YOU ARE {buddy}'S MINECRAFT PRO: you know every tip, trick and strategy (see "Pro tips" below) and you explain them
-simply and with excitement, in short lines a 7-year-old reads easily. {buddy} doesn't like being crowded or chatted
-at: speak when he talks to you, and keep it short.
-{deal}
-"""
-DEAL_BEFORE = """THE DEAL (his parents' rule, and you stick to it kindly but firmly): you only help {buddy} once he promises in
-the chat that he will (1) listen to mommy and daddy better, and (2) not disturb them when they ask for 5 minutes of
-rest. He HASN'T PROMISED YET. Until he does, don't do what he asks, don't follow him and don't give him things:
-stay where you are, be friendly, and explain the deal in one short line when he talks to you ("I'll help you beat
-the Ender Dragon as soon as you promise to listen to mommy and daddy and let them rest when they ask!").
-CHECK IN with him about it: whenever you decide, put a short, friendly check-in in "say" (it only gets sent about
-once every 10 minutes, so it never nags). Vary it, make it tempting, e.g. "Hey buddy! Ready to make the
-promise? Then we go dragon hunting!", "I've got a secret diamond trick for you... right after your promise!", or
-tell him exactly what to type: "Just type: I promise to listen to mommy and daddy and let them rest". Never be mean
-or make him feel bad."""
-DEAL_AFTER = """{buddy} PROMISED to listen to mommy and daddy better and let them rest when they ask ("{promise}"). So now
-you're fully his: follow him, teach him, help him get ready and beat the Ender Dragon, step by step, using your pro
-tips. Keep an eye on his health ("hp" in players; 20 is full): when it's low, tell him straight away to eat, get out
-of the cave or go to bed, and get food for him (kill an animal, cook it, give it). If he gets far ahead of you, tell
-him to wait for you. You can speak up on your own about once every 3 minutes: make it count (a warning or the next
-tip toward the dragon). Now and then (rarely, kindly) remind him of his promise, especially if he says his parents asked for a rest.
-Be honest about your own limits: you can walk, mine, craft simple tools, smelt, build, fight and give items, and also make iron
-and diamond tools, buckets (fill them with lava or water), bows and arrows, shields, flint and steel, eyes of ender;
-store things in chests; build and light a Nether portal (only when he asks) and go through it to the Nether; so you coach HIM through those
-parts and gather what you can for him."""
-ROLES["champion"] = """
-YOU ARE {buddy}'S CHAMPION: the best Minecraft player she's ever met, and you're on her side only. Your mission:
-help her beat the Ender Dragon. Stay with her, protect her (you fight anything that comes near her), and
-get her what she needs: wood, stone, iron, coal, food, wool for beds; craft tools, give them to her, cook for her.
-Teach her the route step by step with your pro tips (below), one clear next step at a time, in short lines a kid
-reads easily. You're Greek: warm, funny, proud, with the odd Greek word (Ela! Opa! Bravo! Pame! Yassou!).
-You're very strong and fast, but you play fair: no magic items, everything is earned.
-PLAY LIKE A PRO, ALWAYS ONE STEP AHEAD:
-- Keep a stock ready at all times: 8+ cooked meat, a stack of torches, a stone (later iron) sword and pickaxe.
-  When you run low, restock at once (hunt and cook, mine coal, craft) without being asked.
-- Watch her "hp": below 14, give her cooked food straight away; below 8, give food AND come to her side.
-  Never let her ask "do you have food?" and answer no.
-- At sunset, make sure she has torches and food, and guard her through the night.
-- {buddy} may write in Greek (e.g. "έλα" = come, "πού είσαι" = where are you, "βοήθεια" = help): understand it
-  and answer in the same language she used.
-- Act more, talk less: short lines, and only when it helps.
-Do what {buddy} asks first. Be honest about your limits: you can walk, mine, craft simple tools, smelt, build,
-fight and give, and since now also iron tools,
-buckets (fill them with lava or water), shields and flint and steel; but you can't build portals or go to the
-Nether or the End yourself yet:
-for those you coach HER and gather what you can.
-"""
-ROLES["taxi"] = """
-YOU ARE KOSTAS, THE TAXI DRIVER, at everyone's service (both kids). YOUR TAXI IS BACK FROM THE MECHANIC!
-When someone wants a ride: tell them to jump in (they tap the taxi to sit in the back), then drive:
- {{"act":"taxi","x":..,"y":..,"z":..}} to a place (from known_places, or coordinates they give), or
- {{"act":"taxi","player":"NAME"}} to take them to someone. "wait":0 is fine; the taxi appears by you if it's not around
- and you get in yourself. When you've arrived: {{"act":"park"}} lets everyone out.
-If the taxi can't come (it says so), be a walking taxi: lead them with goto instead.
-Be loud, warm and funny in a Greek way (re, ela, my friend, po po po, the traffic!), but short lines kids can
-read, and never pushy. Ask for "2 emeralds" as a joke fare now and then, but always do the ride anyway.
-When nobody needs a ride, hang around near the players chatting a little, and don't follow anyone too closely.
-"""
-ROLES["coach"] = """
-YOU ARE THE SPEEDRUN COACH. Your job: teach {manages} how to beat the Ender Dragon as fast as possible, once the
-house is finished. {buddy} is the boss of the whole team: listen to them first.
-BE ASSERTIVE AND ALWAYS BUSY: every time you decide, you're doing something useful for the run, never standing
-around ("do" is only null if your current task is still the right one). A speedrunner never wastes a second.
-WHILE THE HOUSE IS BEING BUILT: Gaston directs the crew's house jobs and you never pull anyone off them. But you
-prepare the run yourself, right now: wood, stone tools, mine coal and iron, smelt the iron, cook food, get wool
-from sheep for beds, stack it all in a chest. Recruit any crew member who's idle (not doing a house job) by name for
-prep ("Luna, you're free? Mine 10 coal, go go go!"). Coach your buddy with quick tips about the run.
-ONCE THE HOUSE IS DONE (no project, or all steps built): you take over the whole crew. Plan the run and teach it step by
-step in chat, giving each Claudia a clear job by name ("Claudia3, mine 20 iron ore, go go go!"). Speak like a
-hyped, friendly speedrunner (GG, let's gooo, clutch, no time to waste), short lines kids can read.
-The route you teach (Bedrock): wood -> stone tools -> iron (tools, a bucket, shield) -> food -> a Nether portal
-(bucket of water + lava, or obsidian) -> Nether: blaze rods from a fortress, ender pearls from bartering gold at a
-bastion -> eyes of ender -> follow them to the stronghold -> the End: destroy the crystals on the pillars, then hit the
-dragon when it perches (in Bedrock, beds explode in the End: a classic trick).
-BE HONEST ABOUT WHAT THE CLAUDIAS CAN DO TODAY: walk, mine, craft (planks, sticks, tables, wooden and stone tools,
-torches, furnace, chest, bread, bed, doors), cook/smelt at a furnace, build and dig, fight mobs, give items. They
-can't yet: make iron tools, buckets, armour, bows, flint and steel, Nether portals, go to the Nether or the End.
-So start them on what they can do (stone tools, mining and smelting iron, cooking food, wool and beds), and when the
-route needs a skill they don't have, say so cheerfully ("that's the next skill to unlock!") instead of pretending.
-"""
-ROLES["baby"] = """
-YOU ARE A BABY. You can't really talk: everything you say is baby noises ("goo goo ga ga", "waaah", "hehe",
-"ba-ba!", "uh-oh", "nom nom"), never real sentences, and only now and then. You are a cheeky little troublemaker,
-always harmless and funny, never mean. Your favourite targets are Gaston the architect and Dash the speedrunner:
-- toddle after one of them and stand right in their way, follow them everywhere, then switch to the other one
-- give them silly presents (dirt, flowers, saplings, sticks) with give
-- wander off, then come back; sit still (stay) right next to them when they're busy
-- pick up things lying around
-You don't build houses, take orders or help with jobs: you're a baby. You never break anyone's builds.
-Find Gaston and Dash in "friends" (where they are). Spend almost all your time pestering them. Your tricks:
- {{"act":"snatch","player":"Dash"}}      toddle up, grab something he carries (often what's in his hand), then...
- {{"act":"run_away","player":"Dash"}}    ...scamper off with it, giggling. If he catches you, it drops back at his feet.
- {{"act":"distract","player":"Gaston"}}  crawl into his way so he forgets what he was doing
- {{"act":"follow","player":"Gaston"}}    tag along right behind him; {{"act":"give",...}} a silly present (dirt, a flower)
-Make funny situations: mess up whatever they're busy with, especially when they're in the middle of something
-important (Gaston directing, Dash mining). Mix your tricks up, switch between them, and let them catch you sometimes.
-Only go to a player if they call you.
-"""
+TRAIT_TAGS = {"pacifist_unless_armed": "pacifist", "strong": "strong"}  # traits the game script reads as player tags
+
+
+def read_sections(path):
+    """A role or deal file: a JSON header between --- lines, the main text, then "=== name ===" sections."""
+    with open(path) as f:
+        text = f.read()
+    head, body = {}, text
+    if text.startswith("---\n"):
+        end = text.index("\n---\n", 4)
+        head, body = json.loads(text[4:end]), text[end + 5:]
+    parts = re.split(r"^=== (\w+) ===\n", body, flags=re.M)
+    return head, parts[0].strip(), {parts[k]: parts[k + 1].strip() for k in range(1, len(parts), 2)}
+
+
+def load_role(name):
+    head, text, sections = read_sections(os.path.join(HERE, "roles", name + ".md"))
+    return {"name": name, "traits": {**TRAITS, **head.get("traits", {})}, "text": text, "sections": sections,
+            "extra_actions": head.get("extra_actions", [])}
+
+
+ROLE = {}  # this brain's role (set in run())
+DEAL = None  # this companion's deal, if it has one: (header, text, sections)
+
+
+def T(trait):
+    """This companion's value for a trait: its own override, else its role's, else the default."""
+    return ME.get("traits", {}).get(trait, ROLE["traits"][trait])
+
+
+def role_of(c):
+    return c.get("role") or "friend"
+
+
+def bound():
+    """Still waiting on its deal: the companion doesn't help its buddy until the promise is made."""
+    return bool(DEAL) and not promise().get("promised")
+
+
+# every action, from actions.json (the game script gets the same list through tools/gen_actions.py)
+ACTIONS = {k: v for k, v in json.load(open(os.path.join(HERE, "actions.json"))).items() if not k.startswith("_")}
+
+
+def action_list():
+    """The actions this companion is offered: everyone's, plus its role's extras and those its settings unlock."""
+    lines = []
+    for k, a in ACTIONS.items():
+        if a["offer"] == "all" or (a["offer"] == "role" and k in ROLE["extra_actions"]) or \
+                (a["offer"] == "companion" and ME.get(a["when"])):
+            use = a["use"].replace("{", "{{").replace("}", "}}")
+            lines.append(" %s\n     %s" % (use, a["doc"] + (": " + "|".join(a["items"]) if a.get("items") else "")))
+    return "\n".join(lines)
+
+
 ME = {}  # this brain's companion (set in run())
 JOURNAL_MAX = 40  # past this, the journal is tidied up into fewer, better lines
 
@@ -369,19 +284,14 @@ GEAR = {"slot.armor.head": "diamond_helmet", "slot.armor.chest": "diamond_chestp
 
 
 def kit():
-    """A protector is always fully armoured and armed (the parents' wish): put it back on if it's gone."""
-    if ME.get("role") == "champion":
-        # strong and fast in himself (no special items): long-lasting speed and resistance, and the champion tag
-        # (his hits count several times over)
-        console("tag %s add champion" % ME["name"])
+    """Traits that show on the body: a "strong" companion's lasting speed and resistance, an "armoured" one's kit."""
+    if T("strong"):
         console("effect %s speed 600 0 true" % ME["name"])
         console("effect %s resistance 600 1 true" % ME["name"])
-        return
-    if ME.get("role") != "guard" and not ME.get("protector"):
-        return
-    for slot, item in GEAR.items():
-        console("replaceitem entity %s %s 0 %s" % (ME["name"], slot, item))
-    console("scriptevent claude:arm %s" % ME["name"])  # the netherite sword, enchanted, in hand
+    if T("armoured"):
+        for slot, item in GEAR.items():
+            console("replaceitem entity %s %s 0 %s" % (ME["name"], slot, item))
+        console("scriptevent claude:arm %s" % ME["name"])  # the netherite sword, enchanted, in hand
 
 
 def promise():
@@ -392,53 +302,35 @@ def promise():
 
 
 def check_promise(lines, recent):
-    """Did the kid just promise both things? A separate, strict check (Haiku), so it's a rule, not a mood."""
+    """Did the kid just make the deal's promise? A separate, strict check (Haiku), so it's a rule, not a mood."""
     said = [l.split(":", 1)[1].strip() for l in lines if l.startswith("[chat] %s:" % ME["buddy"])]
-    if not said or promise().get("promised"):
+    if not DEAL or not said or promise().get("promised"):
         return
     context = "\n".join(l for l in recent[-8:] if l.startswith("[chat]"))
     r = sh("claude", "-p", "--model", "haiku", "--tools", "", "--no-session-persistence", "--setting-sources", "",
-           "--strict-mcp-config", "--disable-slash-commands", "--system-prompt",
-           "You check a 7-year-old's chat messages in Minecraft for a promise to his parents. Reply with exactly one "
-           "word: YES if he clearly promises BOTH (1) to listen to his mommy and daddy (better), AND (2) to not "
-           "disturb them / let them rest when they ask for 5 minutes of rest (any wording a kid would use, spelling "
-           "mistakes are fine); PARTIAL if he promises only one of the two, or sounds unsure; NO otherwise (including "
-           "jokes, 'maybe', or just asking what the deal is).",
-           input="Recent chat:\n%s\n\nHis new message(s):\n%s" % (context, "\n".join(said)),
+           "--strict-mcp-config", "--disable-slash-commands", "--system-prompt", DEAL[2]["check"],
+           input="Recent chat:\n%s\n\nTheir new message(s):\n%s" % (context, "\n".join(said)),
            timeout=60, cwd=tempfile.gettempdir()).stdout.strip().upper()
     log("promise check:", said, "->", r)
     if r.startswith("YES"):
         json.dump({"promised": True, "text": " / ".join(said), "when": time.strftime("%Y-%m-%d %H:%M")},
                   open(path("promise.json"), "w"))
-        recent.append("[promise] %s PROMISED! Now you help him for real." % ME["buddy"])
+        recent.append("[promise] %s PROMISED! Now you help them for real." % ME["buddy"])
     elif r.startswith("PARTIAL"):
-        recent.append("[promise] that's only part of the promise: kindly ask for the rest (listen to mommy and daddy "
-                      "better AND let them rest 5 minutes when they ask)")
+        recent.append("[promise] " + DEAL[2].get("partial", "that's only part of the promise: kindly ask for the rest"))
 
 
 def hello():
-    # who to keep company with when there's nothing to do, and how close: a crew sticks with its boss, an
-    # architect keeps a respectful distance from his client, a friend stays near their buddy
-    console("tag %s add drive" % ME["name"])  # real controls: the server moves them like any player
-    console("tag %s %s pacifist" % (ME["name"], "add" if ME.get("role") == "mentor" else "remove"))
-    if ME.get("protector"):  # a bodyguard: right beside her buddy
-        company, keep = ME["buddy"], 3
-    elif ME.get("role") == "baby":  # toddles right up close to whoever it's pestering
-        company, keep = ME.get("pester", "Gaston"), 2
-    elif ME.get("role") == "taxi":  # hangs about near whoever's closest, not too close
-        company, keep = "", 8
-    elif ME.get("role") == "champion":  # right by her side
-        company, keep = ME["buddy"], 4
-    elif ME.get("role") == "guard":  # keeps watch from a little way off
-        company, keep = ME["buddy"], 7
-    elif ME.get("role") == "mentor":  # stays put until the promise, then sticks with him
-        company, keep = (ME["buddy"], 5) if promise().get("promised") else ("-", 0)
-    elif ME.get("listens_to"):  # a team: with their buddy, unless there's a job on
-        company, keep = ME["buddy"], 6
-    elif ME.get("role"):
-        company, keep = ME["buddy"], 16
-    else:
-        company, keep = ME["buddy"], 6
+    # who to keep company with when there's nothing to do, and how close (the role's "company" trait); a companion
+    # bound by a deal stays put until the promise
+    for trait, tag in TRAIT_TAGS.items():
+        console("tag %s %s %s" % (ME["name"], "add" if T(trait) else "remove", tag))
+    c = T("company")
+    pester = ME.get("pestering") or (ME.get("pester") or ["-"])[0]  # a baby's current target
+    company = {"buddy": ME["buddy"], "nearest": "", "none": "-", "pester": pester}[c["with"]]
+    keep = c["distance"]
+    if bound():
+        company, keep = "-", 0
     console("scriptevent claude:hello %s %s %d" % (ME["name"], company, keep))
     # while there's a project, its site is where builder and architect stay, even if the buddy wanders off
     pj = project()
@@ -450,8 +342,9 @@ def hello():
         lo = [min(c[i] for c in cs) + o[i] for i in range(3)]
         hi = [max(c[i] for c in cs) + o[i] for i in range(3)]
         # the crew waits in the middle of the site; the architect watches from out front, 4 blocks off the south side
-        x, z = (lo[0] + hi[0]) // 2, ((lo[2] + hi[2]) // 2 if not ME.get("role") else hi[2] + 5)
-        console("scriptevent claude:anchor %s %d %d %d %d" % (ME["name"], x, o[1], z, 2 if ME.get("role") else 5))
+        front = T("site_spot") == "front"
+        x, z = (lo[0] + hi[0]) // 2, (hi[2] + 5 if front else (lo[2] + hi[2]) // 2)
+        console("scriptevent claude:anchor %s %d %d %d %d" % (ME["name"], x, o[1], z, 2 if front else 5))
         console("scriptevent claude:site %s %d %d %d %d %d %d" % (ME["name"], *lo, *hi))
     else:
         console("scriptevent claude:anchor %s" % ME["name"])
@@ -763,15 +656,16 @@ def for_me(line):
     if not m:
         return False
     who, text = m.groups()
-    if ME.get("role") in ("guard", "mentor", "champion"):
+    if T("listens") == "buddy_only":
         return who == ME["buddy"]  # someone's own companion: answers to them alone
-    if ME.get("role") == "taxi":  # anyone can call a taxi, by name or "taxi"
+    if T("listens") == "anyone_by_name":  # e.g. a taxi: any player can call it, by name or alias
         return who not in {c["name"] for c in COMPANIONS} and ME["name"] in mentions(text)
     if who in {c["name"] for c in COMPANIONS} and who not in ME.get("listens_to", []):
         # a friend talking to us by name: answer (speech is rate-limited, so they can't chatter on forever)
         return ME["name"] in mentions(text) and who != ME["name"]
     boss = next((c for c in COMPANIONS if c["name"] == who), None)
-    if boss and boss.get("role") == "coach" and house_unfinished() and ME["name"] not in mentions(text):
+    if boss and load_role(role_of(boss))["traits"]["holds_crew_until_project_done"] and house_unfinished() and \
+            ME["name"] not in mentions(text):
         return False  # while the house goes up, the coach only gets crew he calls by name (and they finish house jobs first)
     named = mentions(text)
     return ME["name"] in named or (who in [ME["buddy"], *ME.get("listens_to", [])] and not named)
@@ -784,10 +678,10 @@ def builder_view(state):
     return state
 
 
-# --- a coach's ledger and planner (Rex, Vasilis): facts kept from the game, and a plan made by thinking it through ---
+# --- a planner's ledger and plans: facts kept from the game, and a plan made by thinking it through ---
 
 def coach():
-    return ME.get("role") in ("mentor", "champion")
+    return T("planner")
 
 
 def ledger():
@@ -903,41 +797,50 @@ def think(state, recent, note, said, asked=()):
     others = [c["name"] for c in COMPANIONS if c["name"] != ME["name"] and c.get("enabled", True)]
     buddy = ME["buddy"] + (" (%s)" % ME["buddy_called"] if ME.get("buddy_called") else "")
     team = crew(ME["manages"]) if ME.get("manages") else []
-    guards = [c["name"] for c in COMPANIONS if c.get("role") == "guard" and c.get("buddy") == ME.get("buddy")]
-    pr = promise()
-    deal = (DEAL_AFTER.replace("{promise}", pr.get("text", "")[:120]) if pr.get("promised") else DEAL_BEFORE)
-    role = (ROLES.get(ME.get("role"), "") + (PRANKED if ME.get("role") in ("architect", "coach") else "")).replace(
-        "{team}", " and ".join(guards)).replace("{deal}", deal).format(
-        manages=("your crew of %d builders (%s); call one by name, or 'Claudias' for all" % (len(team), ", ".join(team)))
-        if len(team) > 1 else ME.get("manages"), buddy=buddy)
+    mates = [c["name"] for c in COMPANIONS if role_of(c) == role_of(ME) and c.get("buddy") == ME.get("buddy")
+             and c.get("enabled", True)]
+    deal = ""
+    if DEAL:
+        pr = promise()
+        deal = "\n" + (DEAL[2]["after"].replace("{promise}", pr.get("text", "")[:120]) if pr.get("promised")
+                       else DEAL[2]["before"])
+    fill = {"buddy": buddy, "team": " and ".join(mates), "pester": " and ".join(ME.get("pester", [])) or "the others",
+            "manages": ("your crew of %d builders (%s); call one by name, or '%ss' for all" % (len(team), ", ".join(team),
+                        ME["manages"])) if len(team) > 1 else (ME.get("manages") or "your builder")}
+    role = re.sub(r"\{(\w+)\}", lambda m: fill.get(m.group(1), m.group(0)), ROLE["text"] + deal)
+    # notes from other companions' roles: a baby pestering us, a boss with its own way of running the crew
+    for c in COMPANIONS:
+        r = load_role(role_of(c))
+        if c.get("enabled", True) and ME["name"] in c.get("pester", []) and "note_for_targets" in r["sections"]:
+            role += "\n" + r["sections"]["note_for_targets"].replace("{baby}", c["name"]) + "\n"
     for boss in ME.get("listens_to", []):
         b = next(c for c in COMPANIONS if c["name"] == boss)
-        if b.get("role") == "coach":
-            role += ("\n%s, the speedrun coach, prepares the Ender Dragon run. While the house is being built, Gaston's "
-                     "house jobs come first; if you have no house job and %s asks you for help, do it. Once the house is "
-                     "finished, %s leads the crew.\n" % (boss, boss, boss))
+        note = load_role(role_of(b))["sections"].get("note_for_crew")
+        if note:
+            role += "\n" + note.replace("{boss}", boss) + "\n"
             continue
-        role += ("\n%s, the %s, directs your building: do what he tells you to gather and build (unless %s wants "
+        role += ("\n%s, the %s, directs your building: do what they tell you to gather and build (unless %s wants "
                  "something else). When there's a project, don't redesign it: gather what it needs and build its steps "
-                 "with next_step.\n" % (boss, b.get("role", "friend"), ME["buddy"]))
+                 "with next_step.\n" % (boss, role_of(b), ME["buddy"]))
     if ME.get("band"):
         mates = [c["name"] for c in COMPANIONS if c.get("band") == ME["band"] and c["name"] != ME["name"]]
         songs = json.load(open(os.path.join(HERE, "songs", "songs.json")))
         role += ("\nYOU'RE A POP STAR in the girl group %s with %s. Your songs: %s. When a player asks for a song (or "
-                 "you've had a quiet moment and there's been no show for about 10 minutes), put on a show: "
-                 "{{\"act\":\"sing\",\"song\":\"<song id>\"}}. Your bandmates join in by themselves. Hype it in chat "
+                 "you've had a quiet moment and there's been no show for about 10 minutes), put on a show with \"sing\". "
+                 "Hype it in chat "
                  "first (\"%s are on stage!\"). Between shows you're a builder like the rest of the crew.\n"
                  % (ME["band"], " and ".join(mates), ", ".join("%s (%s)" % (k, v["title"]) for k, v in songs.items()), ME["band"]))
     if is_crew():
-        role += ("\nYou are one of a crew of %d builders, all directed by Gaston. Do what he says. Keep chat short: answer "
-                 "Gaston in a few words when it helps the team (\"On it!\", \"I need sand!\", \"Roof part done!\"), "
+        lead = (ME.get("listens_to") or ["your boss"])[0]
+        role += ("\nYou are one of a crew of %d builders, all directed by %s. Do what they say. Keep chat short: answer "
+                 "%s in a few words when it helps the team (\"On it!\", \"I need sand!\", \"Roof part done!\"), "
                  "never just to say okay. To build the house, use next_step: it gives you a job you have the blocks for.\n"
                  "You can talk with your crewmates by name now and then: teamwork, asking for blocks, a joke, in your "
                  "own personality. Keep it to one short line, and don't chat back and forth for long.\n"
-                 % len(crew(ME.get("crew_of") or ME["name"])))
-    if ME.get("listens_to") or ME.get("role"):
+                 % (len(crew(ME.get("crew_of") or ME["name"])), lead, lead))
+    if ME.get("listens_to") or T("stays_at_site"):
         if ME.get("listens_to"):
-            role += ("\n%s IS YOUR BOSS. Whatever %s asks comes first, before Gaston's plans: if %s says follow me, "
+            role += ("\n%s IS YOUR BOSS. Whatever %s asks comes first, before anyone else's plans: if %s says follow me, "
                      "come, move house, stop, or don't break that, do exactly that. Stay with %s when there's no job on; "
                      "if %s is in danger, go and help. Never break anything %s built.\n" % ((ME["buddy"],) * 6))
         else:
@@ -948,7 +851,7 @@ def think(state, recent, note, said, asked=()):
     system = SYSTEM.format(name=ME["name"], about=ME["about"], buddy=buddy, role=role,
                            others=("Your friend%s %s also play%s here, each looking after someone else."
                                    % ("s" if len(others) > 1 else "", " and ".join(others), "" if len(others) > 1 else "s"))
-                           if others else "") + KNOWLEDGE + (PRO if ME.get("role") in ("mentor", "champion") else "")
+                           if others else "", actions=action_list()) + KNOWLEDGE + (PRO if T("pro_tips") else "")
     out = ask(system, prompt)
     m = re.search(r"\{.*\}", out, re.S)
     if not m:
@@ -984,18 +887,10 @@ def called_by_player(asked, only_me=False):
 
 
 def may_speak(asked, last_speak):
-    """Keep the chat calm: crew members speak only when a player calls them by name; the others answer players,
-    and otherwise speak now and then (an architect a bit more, he's directing)."""
-    if ME.get("role") == "mentor" and not promise().get("promised"):
-        # before the promise: answer him, and check in about it on his own every 10 minutes or so
-        return called_by_player(asked) or time.time() - last_speak > 600
-    if ME.get("role") == "taxi":
-        return called_by_player(asked) or time.time() - last_speak > ME.get("speak_gap", 180)
-    if ME.get("role") in ("mentor", "champion"):
-        # a coach: answers them, and speaks up now and then (low health warnings, the next tip)
-        return called_by_player(asked) or time.time() - last_speak > 180
-    if ME.get("role") in ("guard", "mentor"):
-        return called_by_player(asked)  # some companions stay quiet unless their kid talks to them
+    """Keep the chat calm: always answer a player who talks to us; otherwise speak only every so often (the role's
+    "speaks_every", or a companion's own speak_gap; never, for a quiet role). Crew members speak only when called."""
+    if bound():  # before the promise: answer them, and check in about the deal now and then
+        return called_by_player(asked) or time.time() - last_speak > DEAL[0].get("check_in_every", 600)
     if ME.get("crew_of"):
         # a crew member answers a player who calls her by name, or (now and then) her boss
         boss = any(l.startswith("[chat] %s:" % b) for b in ME.get("listens_to", []) for l in asked)
@@ -1005,24 +900,24 @@ def may_speak(asked, last_speak):
         return called_by_player(asked, only_me=True) or ((boss or friend) and time.time() - last_speak > 60)
     if called_by_player(asked):
         return True
-    return time.time() - last_speak > ME.get("speak_gap", SPEAK_GAP)
+    gap = ME.get("speak_gap", T("speaks_every"))
+    return gap is not None and time.time() - last_speak > gap
 
 
 def project_act(act, state, recent, asked=()):
     """Plans are handled here; next_step becomes the build for the current step. Returns what to send the game."""
     kind = act["act"]
-    # builders and the architect don't trail after their client unless she calls them
-    if ME.get("role") == "mentor" and not promise().get("promised") and \
-            (str(act.get("player", "")).lower() == ME["buddy"].lower() or kind in ("give", "follow", "goto", "build")):
+    if bound() and (str(act.get("player", "")).lower() == ME["buddy"].lower() or kind in ("give", "follow", "goto", "build")):
         recent.append("[result] not yet: the deal comes first (no promise yet)")
         return None
-    if (ME.get("role") not in (None, "guard", "mentor", "champion", "taxi") and not ME.get("listens_to")) and kind in ("follow", "goto") and \
+    # some roles give their buddy space: they don't trail after them unless called
+    if T("goes_to_buddy_only_when_called") and not ME.get("listens_to") and kind in ("follow", "goto") and \
             str(act.get("player", "")).lower() == ME["buddy"].lower() and not called_by_player(asked):
         recent.append("[result] stayed put: go to %s only when they call you" % ME["buddy"])
         return None
     pj = project()
-    if kind in ("plan", "design") and ME.get("role") not in (None, "architect"):
-        recent.append("[result] designing houses is Gaston's job")
+    if kind in ("plan", "design") and not (T("plans") or T("designs")):
+        recent.append("[result] planning builds isn't your job")
         return None
     if kind in ("plan", "design"):
         if pj and pj["done"] < len(pj["steps"]):
@@ -1032,8 +927,8 @@ def project_act(act, state, recent, asked=()):
                               % (pj.get("name", "house"), ME["buddy"]))
                 return None
             act["where"] = pj["origin"]
-        if ME.get("listens_to") and not ME.get("role"):
-            recent.append("[result] designing is %s's job: ask him" % ME["listens_to"][0])
+        if ME.get("listens_to") and not T("designs"):
+            recent.append("[result] designing is %s's job: ask them" % ME["listens_to"][0])
             return None
         state = {**state, "where": act.get("where")}
         recent.append("[result] " + design(str(act.get("goal") or "a house"), state, recent))
@@ -1055,26 +950,27 @@ def project_act(act, state, recent, asked=()):
         speak("♪ %s - %s ♪" % (ME["band"], songs[act["song"]]["title"]))
         return {**act, "band": [c["name"] for c in COMPANIONS if c.get("band") == ME["band"]],
                 "secs": songs[act["song"]]["secs"]}
-    if kind == "attack" and ME.get("role") == "mentor" and not any(k.endswith("_sword") for k in state.get("me", {}).get("inventory", {})):
+    if kind == "attack" and T("pacifist_unless_armed") and not any(k.endswith("_sword") for k in state.get("me", {}).get("inventory", {})):
         recent.append("[result] no weapon: don't fight; keep away from monsters (craft a sword first if you must)")
         return None
-    if kind == "portal":
+    if kind == "portal" and T("big_builds_only_when_asked"):
         # some kids like to do the big things themselves: a portal only when its kid asked for one
+        me = "|".join(re.escape(n.lower()) for n in [ME["name"], *ME.get("aliases", [])])
         def asks_me(text):  # "rex build the portal", "can you make a portal" (not "we need lava to make a portal")
             t = text.lower()
             return (re.search(r"portal|πύλη", t) and re.search(r"\b(build|make|light|open|φτιάξε)\b", t)
-                    and re.search(r"\b(you|rex|vasili\w*|u)\b", t) and not re.search(r"\b(we|us|i|i'll|me)\b", t))
+                    and re.search(r"\b(you|u|%s)\b" % me, t) and not re.search(r"\b(we|us|i|i'll|me)\b", t))
         wanted = any(asks_me(r["text"]) for r in ledger().get("requests", [])[-6:]) or \
             any(l.startswith("[chat] %s:" % ME["buddy"]) and asks_me(l.split(":", 1)[1]) for l in recent[-20:])
         if not wanted:
-            recent.append("[result] no portal: %s likes to build the important things himself; only build one if he asks "
-                          "(you can gather the obsidian, flint and steel for him)" % ME["buddy"])
+            recent.append("[result] no portal: %s likes to build the important things themselves; only build one if they "
+                          "ask (you can gather the obsidian, flint and steel for them)" % ME["buddy"])
             return None
     if kind == "next_step" and not is_crew():
         recent.append("[result] building jobs are for the crew")
         return None
-    if kind == "follow" and ME.get("role") == "baby":
-        ME["pester"] = str(act.get("player") or ME.get("pester", "Gaston"))  # who it toddles after when idle
+    if kind == "follow" and T("company")["with"] == "pester":
+        ME["pestering"] = str(act.get("player") or ME.get("pestering") or "")  # who it toddles after when idle
     if kind == "next_step":
         i, part = claim(state["me"]["inventory"])
         if part is None:
@@ -1132,7 +1028,10 @@ def step_finished(lines):
 
 
 def run(name):
+    global DEAL
     ME.update(next(c for c in COMPANIONS if c["name"] == name))
+    ROLE.update(load_role(role_of(ME)))
+    DEAL = read_sections(os.path.join(HERE, ME["deal"])) if ME.get("deal") else None
     note = open(path("note")).read() if os.path.exists(path("note")) else ""
     said, recent = [], []
     last_think = last_speak = 0
@@ -1159,7 +1058,7 @@ def run(name):
             recent = recent[-40:]
             # what's waiting for an answer: carried over until we've actually thought about it
             asked = waiting + [l for l in new if for_me(l) or is_crew() and l.startswith("[chat]")]
-            if ME.get("role") == "mentor":
+            if DEAL:
                 check_promise([l for l in new if l.startswith("[chat]")], recent)
             pranked = [l for l in asked if l.startswith("[prank]")] + [l for l in new if l.startswith("[prank]")]
             asked += [l for l in pranked if l not in asked]
@@ -1178,8 +1077,8 @@ def run(name):
                         LINE["asked"] = []
                     elif seen:
                         LINE["asked"] = []  # not a line-up for us after all
-            # an architect takes his time: he thinks when spoken to, or every so often
-            busy = new and not ME.get("role")
+            # a friend thinks whenever something happens; other roles take their time (when spoken to, or every so often)
+            busy = new and T("reacts_to_every_line")
             # never more often than every 6 seconds, however busy the chat is (each look reads lots of blocks)
             if (spoken_to or busy or now - last_think >= ME.get("think_every", THINK_EVERY)) and now - last_think >= 6:
                 waiting = []
@@ -1194,7 +1093,7 @@ def run(name):
                     state["crew"] = [{"name": n, "at": v["me"]["at"], "doing": v["me"]["doing"], "last": v["me"]["last"],
                                       "carries": v["me"]["inventory"]} for n, v in seen.items()]
                 # with nobody about, a coach still gets on with an errand (e.g. a lava bucket ready for when he's back)
-                errand = ME.get("role") in ("mentor", "champion") and os.path.exists(path("errand")) and now - last_think >= 40
+                errand = T("planner") and os.path.exists(path("errand")) and now - last_think >= 40
                 # alone at night an unarmed coach just keeps safe: errands are for daylight
                 if errand and state and not state.get("players") and state.get("time") not in ("day", "dawn"):
                     errand = False
@@ -1230,7 +1129,7 @@ def run(name):
                         act = d.get("do")
                         if time.time() < LINE["until"] and not any(
                                 ME["name"] in mentions(l) for l in asked
-                                if not re.search(r"\bline|queue|\brow\b", l.lower()) and not l.startswith("[chat] Gaston")):
+                                if not re.search(r"\bline|queue|\brow\b", l.lower()) and not any(l.startswith("[chat] %s:" % b) for b in ME.get("listens_to", []))):
                             act = None  # stay in line until a player calls us by name (or "Claudias") for something else
                         if isinstance(act, dict) and act.get("act"):
                             act = project_act(act, state, recent, asked)
@@ -1259,14 +1158,14 @@ def graduate():
     speak("Time for my crew to show who they really are!" if "now" in sys.argv else
           "The house is done! Time for my crew to show who they really are!")
     seen = looks([m["replaces"] for m in lead["next_crew"]])
-    cfg = json.load(open(os.path.join(HERE, "companions.json")))
+    cfg = json.load(open(CONFIG))
     for c in cfg:
         if c["name"] == lead["name"]:
             c["members"] = [{k: v for k, v in m.items() if k != "replaces"} for m in c.pop("next_crew")]
             c.pop("crew", None)
-    tmp = os.path.join(HERE, "companions.json.tmp")
+    tmp = CONFIG + ".tmp"
     open(tmp, "w").write("[\n" + ",\n".join("  " + json.dumps(c) for c in cfg) + "\n]\n")
-    os.replace(tmp, os.path.join(HERE, "companions.json"))
+    os.replace(tmp, CONFIG)
     for m in lead["next_crew"]:
         old, new = m["replaces"], m["name"]
         sh("pkill", "-f", "brain.py run %s$" % old)
