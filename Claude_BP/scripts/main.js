@@ -1962,9 +1962,9 @@ function handle(id, msg) {
     return;
   }
   if (id === "claude:hello") {
-    // "<who to keep company with when idle> [how far]"
+    // "<who to keep company with when idle: a name, * for whoever's nearest, - for nobody> [how far]"
     const [b, k] = msg.trim().split(/\s+/);
-    buddy = b ?? "";
+    buddy = !b || b === "*" ? "" : b;
     keep = Number(k) || 6;
     bot()?.addTag("companion");
     return;

@@ -181,8 +181,7 @@ def action_list():
     for k, a in ACTIONS.items():
         if a["offer"] == "all" or (a["offer"] == "role" and k in ROLE["extra_actions"]) or \
                 (a["offer"] == "companion" and ME.get(a["when"])):
-            use = a["use"].replace("{", "{{").replace("}", "}}")
-            lines.append(" %s\n     %s" % (use, a["doc"] + (": " + "|".join(a["items"]) if a.get("items") else "")))
+            lines.append(" %s\n     %s" % (a["use"], a["doc"] + (": " + "|".join(a["items"]) if a.get("items") else "")))
     return "\n".join(lines)
 
 
@@ -327,7 +326,7 @@ def hello():
         console("tag %s %s %s" % (ME["name"], "add" if T(trait) else "remove", tag))
     c = T("company")
     pester = ME.get("pestering") or (ME.get("pester") or ["-"])[0]  # a baby's current target
-    company = {"buddy": ME["buddy"], "nearest": "", "none": "-", "pester": pester}[c["with"]]
+    company = {"buddy": ME["buddy"], "nearest": "*", "none": "-", "pester": pester}[c["with"]]
     keep = c["distance"]
     if bound():
         company, keep = "-", 0
@@ -744,7 +743,7 @@ def make_plan(state, recent):
                  "\n".join("%d: %s %s [%s]" % (i, r["t"], r["text"], r["status"]) for i, r in enumerate(lg["requests"])) or "(none)",
                  "\n".join(l for l in recent[-12:] if l.startswith("[chat]")) or "(none)",
                  open(path("errand")).read().strip() if os.path.exists(path("errand")) else "(none)",
-                 SYSTEM.split("Actions (\"do\"):")[1].split("Coordinates:")[0]))
+                 action_list()))
     out = ask(PLANNER.format(name=ME["name"], buddy=ME["buddy"]), prompt)
     m = re.search(r"\{.*\}", out, re.S)
     try:
@@ -838,16 +837,17 @@ def think(state, recent, note, said, asked=()):
                  "You can talk with your crewmates by name now and then: teamwork, asking for blocks, a joke, in your "
                  "own personality. Keep it to one short line, and don't chat back and forth for long.\n"
                  % (len(crew(ME.get("crew_of") or ME["name"])), lead, lead))
-    if ME.get("listens_to") or T("stays_at_site"):
+    if ME.get("listens_to") or T("stays_at_site") or T("goes_to_buddy_only_when_called"):
         if ME.get("listens_to"):
             role += ("\n%s IS YOUR BOSS. Whatever %s asks comes first, before anyone else's plans: if %s says follow me, "
                      "come, move house, stop, or don't break that, do exactly that. Stay with %s when there's no job on; "
                      "if %s is in danger, go and help. Never break anything %s built.\n" % ((ME["buddy"],) * 6))
-        else:
+        elif T("goes_to_buddy_only_when_called"):
             role += ("\nDon't walk over to %s or follow them unless they call you; give them space to play.\n" % ME["buddy"])
-        role += ("\nWhile a project is under way, the build site is your place: keep working there with the team even "
-                 "when %s walks off to play elsewhere. Don't follow them away; only leave if they ask you to come "
-                 "(and come back to the site after).\n" % ME["buddy"])
+        if T("stays_at_site"):
+            role += ("\nWhile a project is under way, the build site is your place: keep working there with the team even "
+                     "when %s walks off to play elsewhere. Don't follow them away; only leave if they ask you to come "
+                     "(and come back to the site after).\n" % ME["buddy"])
     system = SYSTEM.format(name=ME["name"], about=ME["about"], buddy=buddy, role=role,
                            others=("Your friend%s %s also play%s here, each looking after someone else."
                                    % ("s" if len(others) > 1 else "", " and ".join(others), "" if len(others) > 1 else "s"))

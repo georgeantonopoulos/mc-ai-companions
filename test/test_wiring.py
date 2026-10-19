@@ -128,6 +128,9 @@ class Companions(unittest.TestCase):
                     self.fail(where + ": instructions weren't built")
                 except Captured as got:
                     system = got.args[0]
+                self.assertNotIn("{{", system, where + ": doubled braces reach Claude")
+                if b.T("company")["with"] == "buddy" and not b.T("goes_to_buddy_only_when_called"):
+                    self.assertNotIn("Don't walk over to", system, where + ": told to keep away from the buddy it stays with")
                 left = re.findall(r"(?<!\{)\{[a-z_]+\}(?!\})", system)
                 self.assertEqual(left, [], where + ": unfilled placeholders in the instructions")
                 for k, a in ACTIONS.items():
